@@ -37,7 +37,7 @@ Because sales are generated from pageviews, this project cannot show that buzz r
 |---|---|
 | Language | Python 3.11+ |
 | Package/env management | `uv` |
-| Warehouse | DuckDB (single file: `data/fandom_ledger.duckdb`) |
+| Warehouse | DuckDB 1.5.x (single file: `data/fandom_ledger.duckdb`). Pinned because the VS Code DuckDB extension runs 1.5 and can't read files written by 2.0. |
 | Transformation | dbt-core + `dbt-duckdb` |
 | App | Plotly Dash (multi-page via `dash.register_page`) + Plotly Express |
 | Data and config libraries | `numpy`, `pandas`, `pyyaml` |
@@ -73,6 +73,8 @@ choreographed-content/            # repo root; the project name stays Fandom Led
 │   ├── fixtures/                 # committed pageview + FX snapshots for CI (no network)
 │   └── fandom_ledger.duckdb      # gitignored
 ├── ingest/
+│   ├── common.py                 # shared paths, config, and HTTP retries
+│   ├── fixtures.py               # snapshots raw pageviews + FX, and restores them offline
 │   ├── fetch_pageviews.py
 │   ├── fetch_fx.py
 │   ├── generate_partner_data.py
@@ -146,6 +148,7 @@ The generator must be **deterministic** (fixed random seed) and must **read the 
 **Sales model (per title × partner × region × day):**
 - `units = base_demand × partner_factor × region_factor × f(lagged pageviews) + noise`
 - Buzz response lags pageviews by a partner-specific number of days (e.g. apparel faster than toys).
+- Noise is one shared shock per title × partner × region × day, then Poisson counts per SKU and country. Per-SKU noise alone averages out and leaves sales unrealistically close to buzz.
 - No sales before a title's `first_sale_date`.
 - Planted findings in `ground_truth.yml`, for example:
   - Among partners selling in the EU (Maison Merch and Vault), Partner B converts buzz to sales best.

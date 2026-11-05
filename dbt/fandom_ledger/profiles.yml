@@ -3,5 +3,5 @@ fandom_ledger:
   outputs:
     dev:
       type: duckdb
-      path: "{{ env_var('FANDOM_LEDGER_DB') }}"
+      path: "{{ env_var('FANDOM_LEDGER_DB', '../../data/fandom_ledger.duckdb') }}"
       threads: 4

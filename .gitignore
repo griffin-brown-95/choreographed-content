@@ -17,5 +17,8 @@ dbt/fandom_ledger/logs/
 dbt/fandom_ledger/.user.yml
 logs/
 
+# Personal editor settings
+.vscode/
+
 # OS
 .DS_Store
