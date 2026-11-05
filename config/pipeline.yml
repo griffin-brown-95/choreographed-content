@@ -1,0 +1,9 @@
+# Pinned so that output doesn't change with the run date.
+window:
+  start: 2022-10-01
+  end: 2026-10-31
+
+fx:
+  # 2022-10-01 is a Saturday, so forward-fill needs an earlier published rate.
+  fetch_start: 2022-09-26
+  currencies: [EUR, GBP]

@@ -1,0 +1,23 @@
+partner_id,raw_country_code,country_code,country_name,region
+toyworks,USA,US,United States,NORTH_AMERICA
+toyworks,CAN,CA,Canada,NORTH_AMERICA
+toyworks,UNKNOWN,UNK,Unknown,UNKNOWN
+maison_merch,FR,FR,France,EU
+maison_merch,DE,DE,Germany,EU
+maison_merch,ES,ES,Spain,EU
+maison_merch,IT,IT,Italy,EU
+maison_merch,NL,NL,Netherlands,EU
+maison_merch,UK,GB,United Kingdom,UK
+vault,US,US,United States,NORTH_AMERICA
+vault,CA,CA,Canada,NORTH_AMERICA
+vault,MX,MX,Mexico,LATAM
+vault,BR,BR,Brazil,LATAM
+vault,GB,GB,United Kingdom,UK
+vault,FR,FR,France,EU
+vault,DE,DE,Germany,EU
+vault,ES,ES,Spain,EU
+vault,IT,IT,Italy,EU
+vault,NL,NL,Netherlands,EU
+vault,JP,JP,Japan,APAC
+vault,KR,KR,South Korea,APAC
+vault,AU,AU,Australia,APAC

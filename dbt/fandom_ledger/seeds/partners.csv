@@ -1,0 +1,4 @@
+partner_id,partner_name,product_focus,report_format,report_cadence
+toyworks,Toyworks,toys,csv,monthly
+maison_merch,Maison Merch,apparel,xlsx,monthly
+vault,Vault Collectibles,games_collectibles,json,weekly

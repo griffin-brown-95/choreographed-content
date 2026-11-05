@@ -1,0 +1,20 @@
+name: fandom_ledger
+version: "0.1.0"
+profile: fandom_ledger
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+clean-targets: ["target", "dbt_packages"]
+
+seeds:
+  fandom_ledger:
+    +schema: seeds
+    titles:
+      +column_types:
+        first_sale_date: date
+    title_launches:
+      +column_types:
+        launch_date: date

@@ -1,0 +1,35 @@
+[project]
+name = "fandom-ledger"
+version = "0.1.0"
+description = "Licensing-partner sales and fan buzz, unified with dbt and explored in Plotly Dash."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "dash",
+    "dbt-core",
+    "dbt-duckdb",
+    "duckdb",
+    "httpx",
+    "numpy",
+    "openpyxl",
+    "pandas",
+    "plotly",
+    "pyyaml",
+]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

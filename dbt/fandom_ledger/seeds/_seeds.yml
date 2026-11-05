@@ -1,0 +1,77 @@
+version: 2
+
+seeds:
+  - name: titles
+    description: One row per title. Real names and Wikipedia articles.
+    columns:
+      - name: title_id
+        tests: [unique, not_null]
+      - name: wikipedia_article
+        tests: [unique, not_null]
+      - name: fan_segment
+        tests:
+          - accepted_values:
+              arguments:
+                values: [general, anime_animation_ip]
+      - name: first_sale_date
+        tests: [not_null]
+
+  - name: title_launches
+    description: One row per launch, with real dates verified against Wikipedia.
+    columns:
+      - name: launch_id
+        tests: [unique, not_null]
+      - name: title_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('titles')
+                field: title_id
+      - name: launch_date
+        tests: [not_null]
+
+  - name: partners
+    description: One row per licensing partner.
+    columns:
+      - name: partner_id
+        tests: [unique, not_null]
+
+  - name: regions
+    description: Maps each partner's raw country code to a standard country and region.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [partner_id, raw_country_code]
+    columns:
+      - name: partner_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('partners')
+                field: partner_id
+      - name: region
+        tests:
+          - accepted_values:
+              arguments:
+                values: [NORTH_AMERICA, EU, UK, APAC, LATAM, UNKNOWN]
+
+  - name: sku_crosswalk
+    description: Partner SKU to title mapping. Deliberately incomplete, and derived from config/sku_catalog.csv.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [partner_id, partner_sku]
+    columns:
+      - name: partner_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('partners')
+                field: partner_id
+      - name: title_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('titles')
+                field: title_id

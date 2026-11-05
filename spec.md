@@ -60,7 +60,8 @@ choreographed-content/            # repo root; the project name stays Fandom Led
 ├── .github/workflows/ci.yml
 ├── config/
 │   ├── ground_truth.yml          # planted effects the generator uses (see §5.3)
-│   └── pipeline.yml              # pinned date window and fetch start dates
+│   ├── pipeline.yml              # pinned date window and fetch start dates
+│   └── sku_catalog.csv           # every partner SKU; source of truth for the crosswalk
 ├── data/
 │   ├── raw/                      # generated + downloaded files (gitignored)
 │   │   ├── partner_a/            # CSVs
@@ -170,6 +171,7 @@ The generator must be **deterministic** (fixed random seed) and must **read the 
 **SKU crosswalk (seed: `seeds/sku_crosswalk.csv`)**
 - Columns: `partner_id, partner_sku, title_id, product_category`
 - Deliberately **incomplete**: ~3% of partner SKUs have no mapping, so the data-health page has something real to show.
+- Derived from `config/sku_catalog.csv`, which lists every SKU with its true title, price, demand weight, and an `in_crosswalk` flag. The generator sells from the catalog and writes the crosswalk from it, so the two can't drift apart.
 
 **Other seeds:** `partners.csv`, `regions.csv` (country → region mapping, including the inconsistent codes each partner uses, e.g. `UK` vs `GB`). `regions.csv` includes an `UNKNOWN` region for blank codes such as Toyworks' blank `Region` rows. These rows stay in the facts and are reported on the Data Health page.
 

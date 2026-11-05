@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Data: generated or downloaded, never committed
+data/raw/
+data/*.duckdb
+data/*.duckdb.wal
+
+# dbt
+dbt/fandom_ledger/target/
+dbt/fandom_ledger/dbt_packages/
+dbt/fandom_ledger/logs/
+dbt/fandom_ledger/.user.yml
+logs/
+
+# OS
+.DS_Store

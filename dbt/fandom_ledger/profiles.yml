@@ -1,0 +1,7 @@
+fandom_ledger:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('FANDOM_LEDGER_DB') }}"
+      threads: 4
