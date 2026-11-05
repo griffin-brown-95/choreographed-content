@@ -37,7 +37,7 @@ Because sales are generated from pageviews, this project cannot show that buzz r
 |---|---|
 | Language | Python 3.11+ |
 | Package/env management | `uv` |
-| Warehouse | DuckDB (single file: `data/fandom_ledger.duckdb`) |
+| Warehouse | DuckDB 1.5.x (single file: `data/fandom_ledger.duckdb`). Pinned because the VS Code DuckDB extension runs 1.5 and can't read files written by 2.0. |
 | Transformation | dbt-core + `dbt-duckdb` |
 | App | Plotly Dash (multi-page via `dash.register_page`) + Plotly Express |
 | Data and config libraries | `numpy`, `pandas`, `pyyaml` |
