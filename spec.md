@@ -14,6 +14,8 @@ Three licensing partners send sales reports in different, messy formats. Real da
 
 **Data honesty:** Title names, launch dates, pageviews, and FX rates are real. **All sales and order data is synthetic.** This must be stated in the README and on a banner in the Dash app.
 
+Because sales are generated from pageviews, this project cannot show that buzz really predicts merch sales. It shows that the pipeline recovers known, planted effects from messy data. The README memo must frame its findings that way.
+
 ## 2. Goals and non-goals
 
 ### Goals
@@ -38,6 +40,8 @@ Three licensing partners send sales reports in different, messy formats. Real da
 | Warehouse | DuckDB (single file: `data/fandom_ledger.duckdb`) |
 | Transformation | dbt-core + `dbt-duckdb` |
 | App | Plotly Dash (multi-page via `dash.register_page`) + Plotly Express |
+| Data and config libraries | `numpy`, `pandas`, `pyyaml` |
+| dbt packages | `dbt_utils` |
 | Excel handling | `openpyxl` |
 | HTTP | `httpx` |
 | Lint/format | `ruff` |
@@ -48,22 +52,24 @@ Three licensing partners send sales reports in different, messy formats. Real da
 ## 4. Repository layout
 
 ```
-fandom-ledger/
+choreographed-content/            # repo root; the project name stays Fandom Ledger
 ├── README.md
 ├── spec.md
 ├── Makefile
 ├── pyproject.toml
 ├── .github/workflows/ci.yml
 ├── config/
-│   └── ground_truth.yml          # planted effects the generator uses (see §5.3)
+│   ├── ground_truth.yml          # planted effects the generator uses (see §5.3)
+│   └── pipeline.yml              # pinned date window and fetch start dates
 ├── data/
 │   ├── raw/                      # generated + downloaded files (gitignored)
 │   │   ├── partner_a/            # CSVs
 │   │   ├── partner_b/            # XLSX (incl. restatements)
 │   │   ├── partner_c/            # JSON
 │   │   ├── pageviews/
-│   │   └── fx/
-│   ├── fixtures/                 # small committed samples for CI (no network)
+│   │   ├── fx/
+│   │   └── delivery_manifest.csv # when each partner file "arrived" (see §5.3)
+│   ├── fixtures/                 # committed pageview + FX snapshots for CI (no network)
 │   └── fandom_ledger.duckdb      # gitignored
 ├── ingest/
 │   ├── fetch_pageviews.py
@@ -90,11 +96,17 @@ fandom-ledger/
 
 ## 5. Data sources
 
-### 5.1 Titles (seed: `seeds/titles.csv`)
+### 5.1 Titles (seeds: `seeds/titles.csv`, `seeds/title_launches.csv`)
 
-Columns: `title_id, title_name, wikipedia_article, title_type, launch_date, season_label`.
+`titles.csv` has one row per title, keyed by `title_id`. Columns: `title_id, title_name, wikipedia_article, title_type, fan_segment, first_sale_date`.
 
-Starter list (one row per launch; a title can have multiple seasons). **Verify every `wikipedia_article` and `launch_date` against Wikipedia before committing.**
+`title_launches.csv` has one row per launch, keyed by `launch_id`. Columns: `launch_id, title_id, season_label, launch_date`.
+
+- SKUs, pageviews, and sales attach to `title_id`. Launch-indexed analysis uses `launch_id`.
+- `fan_segment` groups titles for planted effects. Arcane, One Piece, and KPop Demon Hunters are `anime_animation_ip`, even though One Piece here is live action. All others are `general`.
+- `first_sale_date` is the first day a title can have sales. It matters for titles that launch inside the window, such as One Piece and KPop Demon Hunters.
+
+Starter list. **Verify every `launch_date` against Wikipedia before committing.** The `wikipedia_article` values below were confirmed as existing, non-redirect pages on 2026-11-04. Also verify and add later launches that fall in the window, including Bridgerton S4 and One Piece S2.
 
 | title_name | wikipedia_article | launch (verify) |
 |---|---|---|
@@ -106,7 +118,7 @@ Starter list (one row per launch; a title can have multiple seasons). **Verify e
 | KPop Demon Hunters | `KPop_Demon_Hunters` | 2025-06-20 |
 | Bridgerton | `Bridgerton` | S3 Pt 1: 2024-05-16 |
 
-**Date window:** 2022-10-01 through the most recent complete month.
+**Date window:** 2022-10-01 through 2026-10-31, pinned in `config/pipeline.yml` so output doesn't change with the run date.
 
 ### 5.2 Real sources
 
@@ -115,27 +127,34 @@ Starter list (one row per launch; a title can have multiple seasons). **Verify e
 - Must send a descriptive `User-Agent` header (Wikimedia requirement).
 - Save one JSON file per article to `data/raw/pageviews/`.
 - Handle gaps (missing days) and 404s gracefully; log, don't crash.
+- Observed 2026-11-04: `One_Piece_(2023_TV_series)` data starts 2023-02-01 and `KPop_Demon_Hunters` starts 2025-04-24. Days before that are null, not zero. Both still cover their −30 day launch windows.
 
 **FX rates** (`ingest/fetch_fx.py`)
-- Frankfurter API (free, no key): EUR→USD and GBP→USD daily for the date window.
+- Frankfurter API (free, no key): EUR→USD and GBP→USD daily, from `https://api.frankfurter.dev/v1/{start}..{end}?base={EUR|GBP}&symbols=USD`.
+- Fetch from 2022-09-26, before the date window opens. 2022-10-01 is a Saturday, so forward-fill needs an earlier rate to carry into the first two days.
 - No rates are published on weekends/holidays; leave the gaps in raw data. Forward-filling happens in dbt.
 
 ### 5.3 Synthetic partner data (`ingest/generate_partner_data.py`)
 
 The generator must be **deterministic** (fixed random seed) and must **read the real pageviews** so sales are correlated with buzz. Effects are planted from `config/ground_truth.yml` so the marts can be checked against a known answer.
 
+**Determinism:** the same seed and inputs must give byte-identical files. XLSX files must be normalized, because save timestamps are otherwise embedded in them. Any generated timestamp, such as `generated_at`, must come from the data and never from the clock.
+
+**Delivery manifest:** the generator writes `data/raw/delivery_manifest.csv` with `partner_id, file_name, period, delivered_at`. It is the source of truth for late files and restatement order, because file modification times don't survive regeneration. `load_raw.py` loads it into `raw`.
+
 **Sales model (per title × partner × region × day):**
 - `units = base_demand × partner_factor × region_factor × f(lagged pageviews) + noise`
 - Buzz response lags pageviews by a partner-specific number of days (e.g. apparel faster than toys).
+- No sales before a title's `first_sale_date`.
 - Planted findings in `ground_truth.yml`, for example:
-  - Partner B converts buzz to sales best in EU.
-  - Partner C has the strongest response for anime/animated titles (Arcane, One Piece, KPop Demon Hunters).
+  - Among partners selling in the EU (Maison Merch and Vault), Partner B converts buzz to sales best.
+  - Partner C has the strongest response for titles with `fan_segment = anime_animation_ip`.
   - One title has high buzz but weak merch conversion.
 
 **Partner A — "Toyworks" (toys, US/CA)**
 - Monthly CSV: `data/raw/partner_a/toyworks_sales_YYYY_MM.csv`
 - Columns: `Sales Date` (MM/DD/YYYY), `Item #`, `Item Desc`, `Region`, `Units Sold`, `Sales Amt` (USD, with `$` and commas as strings, e.g. `"$1,234.50"`)
-- Mess: trailing whitespace in `Item #`; ~1% of rows have a blank `Region`; one month arrives late (file date after the next month's file).
+- Mess: trailing whitespace in `Item #`; ~1% of rows have a blank `Region`; one month arrives late (its `delivered_at` in the manifest is after the next month's file).
 
 **Partner B — "Maison Merch" (apparel, EU/UK)**
 - Monthly XLSX: `data/raw/partner_b/maison_merch_YYYYMM.xlsx`
@@ -152,7 +171,7 @@ The generator must be **deterministic** (fixed random seed) and must **read the 
 - Columns: `partner_id, partner_sku, title_id, product_category`
 - Deliberately **incomplete**: ~3% of partner SKUs have no mapping, so the data-health page has something real to show.
 
-**Other seeds:** `partners.csv`, `regions.csv` (country → region mapping, including the inconsistent codes each partner uses, e.g. `UK` vs `GB`).
+**Other seeds:** `partners.csv`, `regions.csv` (country → region mapping, including the inconsistent codes each partner uses, e.g. `UK` vs `GB`). `regions.csv` includes an `UNKNOWN` region for blank codes such as Toyworks' blank `Region` rows. These rows stay in the facts and are reported on the Data Health page.
 
 ## 6. dbt project
 
@@ -162,7 +181,7 @@ The generator must be **deterministic** (fixed random seed) and must **read the 
 ### 6.2 Staging (one model per source; rename, cast, standardize — no joins)
 - `stg_toyworks__sales`
 - `stg_maison_merch__sales` (parse decimal comma, keep `_source_file` to derive restatement version)
-- `stg_vault__order_lines` (unnest JSON, dedupe on `order_ref` + line, normalize timestamp to UTC date)
+- `stg_vault__order_lines` (unnest JSON, derive `line_number` from each line's position in `lines`, dedupe on `order_ref` + `line_number`, normalize timestamp to UTC date)
 - `stg_wikipedia__pageviews`
 - `stg_frankfurter__fx_rates`
 
@@ -175,15 +194,16 @@ All staging models output a common shape where applicable: `partner_id, sale_dat
 - `int_partner_sales_mapped` — joined to the SKU crosswalk; adds `is_mapped`; converts to USD.
 
 ### 6.4 Marts
-- `dim_titles`, `dim_partners`, `dim_regions`
+- `dim_titles` (one row per `title_id`), `dim_title_launches` (one row per `launch_id`), `dim_partners`, `dim_regions`
 - `fct_merch_sales_daily` — grain: title × partner × region × day; mapped rows only.
 - `fct_title_buzz_daily` — grain: title × day.
-- `mart_title_launch_performance` — buzz and sales indexed to days-since-launch (−30 to +90), per title/season.
-- `mart_partner_conversion` — sales per 1,000 pageviews by partner × region × title.
-- `mart_data_health` — unmapped SKU counts and revenue, late files, restatement deltas, duplicate counts removed.
+- `mart_title_launch_performance` — buzz and sales indexed to days-since-launch (−30 to +90), per `launch_id`.
+- `mart_partner_conversion` — sales per 1,000 pageviews by partner × region × title. Pageviews are global English Wikipedia views, so every region shares the same denominator. Treat this as a relative index, not true regional conversion. Compare partners only within a region, on titles they both sell. Rollups must use total sales ÷ total pageviews, never an average of ratios.
+- `mart_buzz_sales_lag` — correlation between daily pageviews and daily sales at each lag, by title × partner. This answers the headline question and uses SQL only.
+- `mart_data_health` — unmapped SKU counts and revenue, `UNKNOWN` region rows, late files (from the delivery manifest), restatement deltas, duplicate counts removed.
 
 ### 6.5 Tests
-- Generic: `unique`, `not_null` on all keys; `relationships` from facts to dims; `accepted_values` for `currency_code` and `region`.
+- Generic: `unique`, `not_null` on all keys; `relationships` from facts to dims; `accepted_values` for `currency_code` and `region` (including `UNKNOWN`).
 - Custom singular/generic tests:
   - Unmapped SKU revenue share must be below 5% (warn at 2%).
   - No duplicate Vault order lines after staging.
@@ -201,7 +221,7 @@ Multi-page app reading marts from DuckDB in **read-only** mode. A persistent ban
 - KPI cards: total revenue, peak buzz day, days from launch to peak sales.
 
 **Page 2 — Partner Scorecard**
-- Heatmap: sales per 1,000 pageviews by partner × region.
+- Heatmap: sales per 1,000 pageviews by partner × region. Cells where a partner doesn't sell stay blank, and a note explains that pageviews are global.
 - Bar chart: conversion by title for the selected partner.
 - Table: underlying numbers, sortable.
 
@@ -222,6 +242,7 @@ Adds a direct-to-consumer "shop" channel as an event stream.
 - `consume_to_iceberg.py`: batch every 500 events or 30 seconds → PyIceberg append to `shop.orders` (partitioned by `day(event_ts)`). Store the last committed Kafka offsets per partition in the Iceberg snapshot summary properties and resume from them on startup (exactly-once into Iceberg).
 - dbt: `stg_shop__orders` reads the Iceberg table via DuckDB `iceberg_scan`; dedupe on `event_id`; shop becomes a fourth "partner" (`partner_id = 'shop'`) in `int_partner_sales_unioned`.
 - Fallback if DuckDB/Iceberg compatibility is a problem: document the issue and have the consumer also write Parquet, which dbt reads instead.
+- `make ci` must pass without Kafka or a live Iceberg table. Put the shop channel behind a dbt variable and give CI a small committed Parquet fixture. Confirm that `INSTALL iceberg` doesn't break the no-external-calls rule in CI.
 
 ## 9. Tooling, Makefile, CI
 
@@ -235,7 +256,9 @@ Adds a direct-to-consumer "shop" channel as an event stream.
 - `make all` — fetch → generate → load → build
 - `make ci` — same as `all` but uses `data/fixtures/` instead of the network
 
-**CI (`.github/workflows/ci.yml`)** on every PR: `ruff check`, `pytest`, then `make ci` (dbt build against fixtures). **CI must never call external APIs.**
+**Fixtures:** `data/fixtures/` holds a compact committed snapshot of the real pageviews and FX rates. `make ci` runs the real generator on that snapshot, so the ground-truth recovery test runs on every PR.
+
+**CI (`.github/workflows/ci.yml`)** on every PR: `ruff check`, `pytest`, then `make ci` (dbt build against fixtures). `ruff check` and `pytest` start in M1, and `make ci` is added once it exists. **CI must never call external APIs.**
 
 ## 10. Milestones and acceptance criteria
 
@@ -247,7 +270,8 @@ Adds a direct-to-consumer "shop" channel as an event stream.
 
 **M2 — dbt**
 - All staging, intermediate, and mart models build; all tests pass.
-- `mart_partner_conversion` recovers the planted findings in `ground_truth.yml` (add a pytest or dbt test that checks this).
+- `mart_partner_conversion` recovers the planted findings in `ground_truth.yml` (add a pytest or dbt test that checks this). Partner comparisons must use the same region and the same titles.
+- `mart_buzz_sales_lag` recovers each partner's planted lag.
 - `dbt docs generate` succeeds.
 
 **M3 — Dash**
@@ -256,16 +280,18 @@ Adds a direct-to-consumer "shop" channel as an event stream.
 
 **M4 — CI and README**
 - CI green on a PR.
-- README: the business question, architecture diagram, how to run, the data-honesty note, screenshots, and 3–5 findings written as a short stakeholder memo.
+- README: the business question, architecture diagram, how to run, the data-honesty note, screenshots, and 3–5 findings written as a short stakeholder memo. The memo must say the findings are recovered planted effects (see §1).
 
 **M5 — Kafka (Phase 2)**
 - Producer → Kafka → Iceberg working via docker compose.
-- Killing the consumer mid-batch and restarting produces no duplicates in Iceberg.
+- Killing the consumer mid-batch and restarting produces no duplicates in Iceberg. Check the raw Iceberg table, because dbt's dedupe would hide them.
 - Shop channel appears in the marts and the Dash app.
 
 ## 11. Working notes for Claude Code
 
 - Work one milestone at a time; stop after each for review.
+- Within a milestone, stop at each reviewable step, with the work visible as a diff. M1 steps: scaffold and seeds, fetchers, generator, loader.
+- Commit the spec and scaffold to `main`, then open one PR per milestone.
 - Ask before adding dependencies not listed in §3.
 - Keep SQL in dbt; Python only for ingest, generation, streaming, and the app.
 - SQL style: lowercase keywords, CTEs over subqueries, one model per file, `snake_case`.
