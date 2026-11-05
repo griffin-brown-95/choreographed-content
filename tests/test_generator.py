@@ -14,40 +14,18 @@ import pytest
 from openpyxl import load_workbook
 
 from ingest.common import SEEDS_DIR
-from ingest.fixtures import FIXTURES_DIR, restore
 from ingest.generate_partner_data import (
     MANIFEST_NAME,
-    generate,
     load_catalog,
     load_ground_truth,
     load_titles,
 )
+from tests.helpers import run_generator
 
 
 @pytest.fixture(scope="session")
 def truth() -> dict:
     return load_ground_truth()
-
-
-def run_generator(raw_dir: Path, truth: dict | None = None) -> pd.DataFrame:
-    restore(FIXTURES_DIR, raw_dir)
-    return generate(raw_dir, raw_dir / "sku_crosswalk.csv", truth)
-
-
-@pytest.fixture(scope="session")
-def generated(tmp_path_factory) -> tuple[Path, pd.DataFrame]:
-    path = tmp_path_factory.mktemp("raw")
-    return path, run_generator(path)
-
-
-@pytest.fixture(scope="session")
-def raw_dir(generated) -> Path:
-    return generated[0]
-
-
-@pytest.fixture(scope="session")
-def sales(generated) -> pd.DataFrame:
-    return generated[1]
 
 
 @pytest.fixture(scope="session")
