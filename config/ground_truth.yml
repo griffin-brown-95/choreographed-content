@@ -1,0 +1,120 @@
+# Planted effects for the synthetic partner data.
+#
+# The generator reads this file to create sales, and the M2 recovery tests read it
+# to check that the marts find the same answers.
+#
+# units = base_demand x partner_factor x region_factor x planted multipliers
+#         x (lagged pageviews / 1,000), then noise
+
+seed: 20221001
+
+# Units sold per 1,000 pageviews, before any factors. Sales scale linearly with
+# pageviews, so sales per 1,000 pageviews means the same thing at any level of buzz.
+base_demand: 2.0
+
+# Negative binomial noise: 0 is pure Poisson, and higher values give lumpier days.
+noise_dispersion: 0.6
+
+partners:
+  toyworks:
+    partner_factor: 0.25
+    lag_days: 10
+    regions: [NORTH_AMERICA]
+  maison_merch:
+    partner_factor: 0.25
+    lag_days: 3
+    regions: [EU, UK]
+  vault:
+    partner_factor: 0.15
+    lag_days: 6
+    regions: [NORTH_AMERICA, EU, UK, APAC, LATAM]
+
+# Relative market size, shared by every partner.
+region_factors:
+  NORTH_AMERICA: 1.0
+  EU: 0.8
+  UK: 0.3
+  APAC: 0.5
+  LATAM: 0.25
+
+# How each region's sales split across its countries.
+country_weights:
+  NORTH_AMERICA: {US: 0.9, CA: 0.1}
+  EU: {FR: 0.3, DE: 0.3, ES: 0.15, IT: 0.15, NL: 0.1}
+  UK: {GB: 1.0}
+  APAC: {JP: 0.5, KR: 0.25, AU: 0.25}
+  LATAM: {MX: 0.5, BR: 0.5}
+
+planted_effects:
+  partner_region:
+    - {partner: maison_merch, region: EU, multiplier: 3.0}
+  partner_segment:
+    - {partner: vault, fan_segment: anime_animation_ip, multiplier: 2.5}
+  title:
+    - {title: bridgerton, multiplier: 0.25}
+
+# What the marts must recover. All comparisons use USD revenue per 1,000 pageviews.
+expected_findings:
+  - id: maison_best_in_eu
+    description: Maison Merch beats Vault in the EU on every title they share.
+    partner: maison_merch
+    compared_to: vault
+    region: EU
+    min_ratio: 1.2
+  - id: vault_strongest_on_anime_animation_ip
+    description: >-
+      Vault's advantage over Maison Merch in the same region is larger on
+      anime_animation_ip titles than on general titles.
+    partner: vault
+    compared_to: maison_merch
+    region: UK
+    fan_segment: anime_animation_ip
+    min_lift: 2.0
+  - id: bridgerton_high_buzz_weak_conversion
+    description: Bridgerton is in the top half for buzz but last for conversion.
+    title: bridgerton
+    max_buzz_rank: 4
+    conversion_rank: last
+  - id: partner_lags
+    description: >-
+      For each partner, the median best lag across titles matches the planted lag.
+      Single titles can miss, because daily noise is high.
+    tolerance_days: 1
+
+# Mess applied to the partner files. Sales above describe the true, corrected figures.
+mess:
+  toyworks:
+    blank_region_rate: 0.01
+    trailing_whitespace_rate: 0.1
+    on_time_days: 5
+    late_month: 2024-06
+    late_days: 40
+  maison_merch:
+    on_time_days: 7
+    restatement_days: 45
+    # List prices are in EUR. UK sales are reported in GBP at this fixed price ratio.
+    gbp_per_eur: 0.86
+    # The first version misreports the month by this factor, and _v2 has the true figures.
+    restatements:
+      - {month: 2023-09, v1_revenue_factor: 0.92}
+      - {month: 2024-12, v1_revenue_factor: 1.06}
+      - {month: 2025-08, v1_revenue_factor: 0.95}
+  vault:
+    duplicate_order_rate: 0.02
+    max_line_quantity: 3
+    max_lines_per_order: 3
+    # Order timestamps use these fixed offsets, so a local date can differ from the UTC date.
+    utc_offset_hours:
+      US: -5
+      CA: -5
+      MX: -6
+      BR: -3
+      GB: 0
+      FR: 1
+      DE: 1
+      ES: 1
+      IT: 1
+      NL: 1
+      JP: 9
+      KR: 9
+      AU: 10
