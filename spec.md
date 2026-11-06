@@ -263,8 +263,10 @@ Adds a direct-to-consumer "shop" channel as an event stream.
 - `make generate` — synthetic partner files
 - `make load` — raw files → DuckDB
 - `make build` — `dbt build` (seeds, models, tests)
+- `make recover` — pytest checks that the built marts recover `ground_truth.yml`
+- `make docs` — `dbt docs generate`
 - `make app` — run Dash locally
-- `make all` — fetch → generate → load → build
+- `make all` — fetch → generate → load → build → recover → docs
 - `make ci` — same as `all` but uses `data/fixtures/` instead of the network
 
 **Fixtures:** `data/fixtures/` holds a compact committed snapshot of the real pageviews and FX rates. `make ci` runs the real generator on that snapshot, so the ground-truth recovery test runs on every PR.

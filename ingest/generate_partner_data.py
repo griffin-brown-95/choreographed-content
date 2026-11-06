@@ -385,6 +385,11 @@ def write_manifest(manifest: list[dict], path: Path) -> None:
     ordered.to_csv(path, index=False, lineterminator="\n")
 
 
+def make_random_streams(seed: int) -> list[np.random.Generator]:
+    """Return the sales, Toyworks, and Vault streams, in that order."""
+    return [np.random.default_rng(stream) for stream in np.random.SeedSequence(seed).spawn(3)]
+
+
 def generate(raw_dir: Path, crosswalk_path: Path, truth: dict | None = None) -> pd.DataFrame:
     """Write every partner file, the manifest, and the crosswalk. Returns the true sales."""
     truth = truth or load_ground_truth()
@@ -393,10 +398,7 @@ def generate(raw_dir: Path, crosswalk_path: Path, truth: dict | None = None) -> 
     raw_codes = load_raw_country_codes()
     mess = truth["mess"]
 
-    sales_rng, toyworks_rng, vault_rng = (
-        np.random.default_rng(stream)
-        for stream in np.random.SeedSequence(truth["seed"]).spawn(3)
-    )
+    sales_rng, toyworks_rng, vault_rng = make_random_streams(truth["seed"])
     sales = simulate_sales(
         truth, load_titles(), catalog, raw_dir / "pageviews", window_end, sales_rng
     )

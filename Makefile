@@ -1,8 +1,8 @@
-export FANDOM_LEDGER_DB := $(CURDIR)/data/fandom_ledger.duckdb
+export FANDOM_LEDGER_DB ?= $(CURDIR)/data/fandom_ledger.duckdb
 export DBT_PROJECT_DIR := $(CURDIR)/dbt/fandom_ledger
 export DBT_PROFILES_DIR := $(CURDIR)/dbt/fandom_ledger
 
-.PHONY: setup lint test fetch fixtures generate load build all ci
+.PHONY: setup lint test fetch fixtures generate load build recover docs all ci
 
 setup:
 	uv sync --locked
@@ -30,8 +30,14 @@ load:
 build:
 	uv run dbt build
 
-all: fetch generate load build
+recover:
+	uv run pytest -m recovery
+
+docs:
+	uv run dbt docs generate
+
+all: fetch generate load build recover docs
 
 ci:
 	uv run python -m ingest.fixtures restore
-	$(MAKE) generate load build
+	$(MAKE) generate load build recover docs
