@@ -186,11 +186,14 @@ The generator must be **deterministic** (fixed random seed) and must **read the 
 ### 6.2 Staging (one model per source; rename, cast, standardize — no joins)
 - `stg_toyworks__sales`
 - `stg_maison_merch__sales` (parse decimal comma, keep `_source_file` to derive restatement version)
-- `stg_vault__order_lines` (unnest JSON, derive `line_number` from each line's position in `lines`, dedupe on `order_ref` + `line_number`, normalize timestamp to UTC date)
+- `stg_vault__order_lines` (unnest JSON, derive `line_number` from each line's position in `lines`, dedupe on `order_ref` + `line_number`, normalize timestamp to UTC date with an explicit `at time zone 'UTC'`, because a plain cast to date uses the session time zone and differs by machine)
 - `stg_wikipedia__pageviews`
 - `stg_frankfurter__fx_rates`
+- `stg_partner_feeds__delivery_manifest`
 
 All staging models output a common shape where applicable: `partner_id, sale_date, partner_sku, country_code, units, gross_amount, currency_code`.
+
+In staging, `country_code` is the code the partner reported, with blanks set to `UNKNOWN`. It becomes a standard code in `int_partner_sales_mapped`, because staging has no joins. `gross_amount` is the amount the partner reported, which for Maison Merch is `CA Net`.
 
 ### 6.3 Intermediate
 - `int_fx_rates_daily` — one row per currency per calendar day, weekends/holidays forward-filled.

@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Files loaded as delivered by ingest/load_raw.py. Every column is text.
+    schema: raw
+    tables:
+      - name: toyworks_sales
+        description: Toyworks monthly CSVs. Sales are synthetic.
+      - name: maison_merch_sales
+        description: Maison Merch monthly XLSX files, including every restatement version. Sales are synthetic.
+      - name: vault_exports
+        description: Vault weekly JSON exports, one row per export, with orders as JSON text. Sales are synthetic.
+      - name: wikipedia_pageviews
+        description: Real daily pageviews for each title's English Wikipedia article.
+      - name: frankfurter_fx_rates
+        description: Real daily FX rates to USD. Weekends and holidays have no rate.
+      - name: delivery_manifest
+        description: When each partner file arrived. Synthetic, and written by the generator.

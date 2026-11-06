@@ -9,6 +9,18 @@ macro-paths: ["macros"]
 
 clean-targets: ["target", "dbt_packages"]
 
+models:
+  fandom_ledger:
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table
+
 seeds:
   fandom_ledger:
     +schema: seeds
