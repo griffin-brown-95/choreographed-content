@@ -12,4 +12,7 @@ jobs:
       - run: make setup
       - run: make lint
       - run: make test
+      # Runners use UTC, which would hide bugs that depend on the session time zone.
       - run: make ci
+        env:
+          TZ: America/Denver

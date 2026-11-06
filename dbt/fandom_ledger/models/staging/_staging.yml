@@ -1,0 +1,127 @@
+version: 2
+
+models:
+  - name: stg_toyworks__sales
+    description: Toyworks sales with parsed dates and amounts, trimmed SKUs, and blank regions set to UNKNOWN.
+    columns:
+      - name: sale_date
+        tests: [not_null]
+      - name: partner_sku
+        tests: [not_null]
+      - name: country_code
+        description: The code Toyworks reported, or UNKNOWN when it was blank.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [USA, CAN, UNKNOWN]
+      - name: units
+        tests: [not_null]
+      - name: gross_amount
+        tests: [not_null]
+
+  - name: stg_maison_merch__sales
+    description: Maison Merch sales from every file version. Later models keep only the latest version.
+    columns:
+      - name: sale_date
+        tests: [not_null]
+      - name: partner_sku
+        tests: [not_null]
+      - name: country_code
+        description: The code Maison Merch reported, such as UK.
+        tests: [not_null]
+      - name: units
+        tests: [not_null]
+      - name: gross_amount
+        description: The CA Net amount in the reported currency.
+        tests: [not_null]
+      - name: currency_code
+        tests:
+          - accepted_values:
+              arguments:
+                values: [EUR, GBP]
+      - name: report_month
+        description: First day of the month the file reports on, taken from the file name.
+        tests: [not_null]
+      - name: report_version
+        description: 1 for the original file, and 2 for a _v2 restatement.
+        tests: [not_null]
+
+  - name: base_vault__order_lines
+    description: >-
+      Every Vault order line as exported, including duplicates from overlapping exports.
+      Use stg_vault__order_lines for analysis.
+
+  - name: stg_vault__order_lines
+    description: >-
+      One row per Vault order line, with duplicate orders from overlapping exports removed.
+      sale_date is the UTC date of the order.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [order_ref, line_number]
+    columns:
+      - name: sale_date
+        tests: [not_null]
+      - name: partner_sku
+        tests: [not_null]
+      - name: country_code
+        description: The ISO code Vault reported.
+        tests: [not_null]
+      - name: units
+        tests: [not_null]
+      - name: gross_amount
+        tests: [not_null]
+      - name: order_ref
+        tests: [not_null]
+      - name: line_number
+        description: The line's position within the order, starting at 1.
+        tests: [not_null]
+
+  - name: stg_wikipedia__pageviews
+    description: Real daily pageviews by Wikipedia article.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [wikipedia_article, view_date]
+    columns:
+      - name: wikipedia_article
+        tests: [not_null]
+      - name: view_date
+        tests: [not_null]
+      - name: pageviews
+        tests: [not_null]
+
+  - name: stg_frankfurter__fx_rates
+    description: Real daily USD rates by currency. Weekends and holidays are filled in int_fx_rates_daily.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [currency_code, rate_date]
+    columns:
+      - name: currency_code
+        tests:
+          - accepted_values:
+              arguments:
+                values: [EUR, GBP]
+      - name: rate_date
+        tests: [not_null]
+      - name: usd_rate
+        tests: [not_null]
+
+  - name: stg_partner_feeds__delivery_manifest
+    description: When each partner file arrived.
+    columns:
+      - name: file_name
+        tests: [unique, not_null]
+      - name: partner_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('partners')
+                field: partner_id
+      - name: period
+        description: The month (YYYY-MM) or ISO week (YYYY-WW) the file covers.
+        tests: [not_null]
+      - name: delivered_at
+        tests: [not_null]

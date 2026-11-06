@@ -186,11 +186,15 @@ The generator must be **deterministic** (fixed random seed) and must **read the 
 ### 6.2 Staging (one model per source; rename, cast, standardize — no joins)
 - `stg_toyworks__sales`
 - `stg_maison_merch__sales` (parse decimal comma, keep `_source_file` to derive restatement version)
-- `stg_vault__order_lines` (unnest JSON, derive `line_number` from each line's position in `lines`, dedupe on `order_ref` + `line_number`, normalize timestamp to UTC date)
+- `stg_vault__order_lines` (unnest JSON, derive `line_number` from each line's position in `lines`, dedupe on `order_ref` + `line_number`, normalize timestamp to UTC date with an explicit `at time zone 'UTC'`, because a plain cast to date uses the session time zone and differs by machine)
 - `stg_wikipedia__pageviews`
 - `stg_frankfurter__fx_rates`
+- `stg_partner_feeds__delivery_manifest`
+- `base_vault__order_lines` (every Vault line before dedupe, so `stg_vault__order_lines` and `mart_data_health` share one JSON parser)
 
 All staging models output a common shape where applicable: `partner_id, sale_date, partner_sku, country_code, units, gross_amount, currency_code`.
+
+In staging, `country_code` is the code the partner reported, with blanks set to `UNKNOWN`. It becomes a standard code in `int_partner_sales_mapped`, because staging has no joins. `gross_amount` is the amount the partner reported, which for Maison Merch is `CA Net`.
 
 ### 6.3 Intermediate
 - `int_fx_rates_daily` — one row per currency per calendar day, weekends/holidays forward-filled.
@@ -205,7 +209,9 @@ All staging models output a common shape where applicable: `partner_id, sale_dat
 - `mart_title_launch_performance` — buzz and sales indexed to days-since-launch (−30 to +90), per `launch_id`.
 - `mart_partner_conversion` — sales per 1,000 pageviews by partner × region × title. Pageviews are global English Wikipedia views, so every region shares the same denominator. Treat this as a relative index, not true regional conversion. Compare partners only within a region, on titles they both sell. Rollups must use total sales ÷ total pageviews, never an average of ratios.
 - `mart_buzz_sales_lag` — correlation between daily pageviews and daily sales at each lag, by title × partner. This answers the headline question and uses SQL only.
-- `mart_data_health` — unmapped SKU counts and revenue, `UNKNOWN` region rows, late files (from the delivery manifest), restatement deltas, duplicate counts removed.
+- `mart_data_health` — unmapped SKU counts and revenue, `UNKNOWN` region rows, late files (from the delivery manifest), restatement deltas, duplicate counts removed. One row per check, partner, and subject, with `check_name` saying which kind of issue it is. A file is late when it arrives after the next period's file.
+
+`mart_partner_conversion` counts pageviews from each title's `first_sale_date`, because earlier views couldn't produce sales. It excludes `UNKNOWN` region rows, so Toyworks' North America conversion reads about 1% low.
 
 ### 6.5 Tests
 - Generic: `unique`, `not_null` on all keys; `relationships` from facts to dims; `accepted_values` for `currency_code` and `region` (including `UNKNOWN`).
@@ -257,8 +263,10 @@ Adds a direct-to-consumer "shop" channel as an event stream.
 - `make generate` — synthetic partner files
 - `make load` — raw files → DuckDB
 - `make build` — `dbt build` (seeds, models, tests)
+- `make recover` — pytest checks that the built marts recover `ground_truth.yml`
+- `make docs` — `dbt docs generate`
 - `make app` — run Dash locally
-- `make all` — fetch → generate → load → build
+- `make all` — fetch → generate → load → build → recover → docs
 - `make ci` — same as `all` but uses `data/fixtures/` instead of the network
 
 **Fixtures:** `data/fixtures/` holds a compact committed snapshot of the real pageviews and FX rates. `make ci` runs the real generator on that snapshot, so the ground-truth recovery test runs on every PR.

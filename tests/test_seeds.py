@@ -34,6 +34,12 @@ def catalog() -> pd.DataFrame:
     return read_csv(ROOT / "config" / "sku_catalog.csv")
 
 
+def test_dbt_window_matches_pipeline_config(window):
+    project = yaml.safe_load((ROOT / "dbt" / "fandom_ledger" / "dbt_project.yml").read_text())
+    assert project["vars"]["window_start"] == str(window["start"])
+    assert project["vars"]["window_end"] == str(window["end"])
+
+
 def test_launch_windows_fit_inside_date_window(launches, window):
     launch_dates = pd.to_datetime(launches["launch_date"])
     assert (launch_dates - pd.Timedelta(days=30) >= pd.Timestamp(window["start"])).all()

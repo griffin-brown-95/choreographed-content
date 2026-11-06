@@ -1,0 +1,75 @@
+version: 2
+
+models:
+  - name: int_fx_rates_daily
+    description: >-
+      One USD rate per currency per calendar day in the window. Weekends and holidays carry
+      the last published rate forward, and USD is always 1.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [currency_code, rate_date]
+    columns:
+      - name: currency_code
+        tests:
+          - accepted_values:
+              arguments:
+                values: [EUR, GBP, USD]
+      - name: rate_date
+        tests: [not_null]
+      - name: usd_rate
+        tests: [not_null]
+      - name: is_forward_filled
+        description: True when no rate was published that day and an earlier rate was carried forward.
+
+  - name: int_maison_merch__latest_restatement
+    description: Maison Merch sales from only the latest file version of each month.
+
+  - name: int_partner_sales_unioned
+    description: All partners' sales in the common shape, before mapping.
+    columns:
+      - name: partner_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('partners')
+                field: partner_id
+
+  - name: int_partner_sales_mapped
+    description: >-
+      Every sale with its title, standard country and region, and USD amount.
+      Unmapped sales stay here with is_mapped false, so they can be measured.
+    columns:
+      - name: title_id
+        description: Null when the SKU has no crosswalk entry.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('titles')
+                field: title_id
+      - name: is_mapped
+        description: True when the SKU has a crosswalk entry.
+        tests: [not_null]
+      - name: raw_country_code
+        description: The code the partner reported.
+        tests: [not_null]
+      - name: country_code
+        description: The standard ISO country code, or UNK when the partner left it blank.
+        tests: [not_null]
+      - name: region
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [NORTH_AMERICA, EU, UK, APAC, LATAM, UNKNOWN]
+      - name: currency_code
+        tests:
+          - accepted_values:
+              arguments:
+                values: [EUR, GBP, USD]
+      - name: usd_rate
+        description: The rate on the sale date, which may be forward-filled.
+        tests: [not_null]
+      - name: gross_amount_usd
+        tests: [not_null]

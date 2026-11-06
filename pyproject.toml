@@ -33,3 +33,5 @@ select = ["B", "E", "F", "I", "UP"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+addopts = "-m 'not recovery'"
+markers = ["recovery: needs a built database, and runs with make recover"]
