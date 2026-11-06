@@ -46,6 +46,11 @@ models:
         description: 1 for the original file, and 2 for a _v2 restatement.
         tests: [not_null]
 
+  - name: base_vault__order_lines
+    description: >-
+      Every Vault order line as exported, including duplicates from overlapping exports.
+      Use stg_vault__order_lines for analysis.
+
   - name: stg_vault__order_lines
     description: >-
       One row per Vault order line, with duplicate orders from overlapping exports removed.

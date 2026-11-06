@@ -1,0 +1,306 @@
+version: 2
+
+models:
+  - name: dim_titles
+    description: One row per title. Names and articles are real.
+    columns:
+      - name: title_id
+        description: Primary key.
+        tests: [unique, not_null]
+      - name: title_name
+        description: Display name.
+        tests: [not_null]
+      - name: wikipedia_article
+        description: The English Wikipedia article used as the buzz signal.
+      - name: title_type
+        description: Live action or animated, and series or film.
+      - name: fan_segment
+        description: Grouping used for planted effects.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [general, anime_animation_ip]
+      - name: first_sale_date
+        description: First day the title can have sales. Synthetic.
+
+  - name: dim_title_launches
+    description: One row per launch. Dates are real and verified against Wikipedia.
+    columns:
+      - name: launch_id
+        description: Primary key.
+        tests: [unique, not_null]
+      - name: title_id
+        description: The title that launched.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_titles')
+                field: title_id
+      - name: title_name
+        description: Display name of the title.
+      - name: season_label
+        description: Season or part label, such as S5 Vol. 1.
+      - name: launch_name
+        description: Title and season label, for dropdowns and charts.
+      - name: launch_date
+        description: First release date of the launch.
+        tests: [not_null]
+
+  - name: dim_partners
+    description: One row per licensing partner.
+    columns:
+      - name: partner_id
+        description: Primary key.
+        tests: [unique, not_null]
+      - name: partner_name
+        description: Display name.
+      - name: product_focus
+        description: What the partner sells.
+      - name: report_format
+        description: File format the partner delivers.
+      - name: report_cadence
+        description: How often the partner delivers.
+
+  - name: dim_regions
+    description: One row per sales region, including UNKNOWN for blank partner codes.
+    columns:
+      - name: region
+        description: Primary key.
+        tests:
+          - unique
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [NORTH_AMERICA, EU, UK, APAC, LATAM, UNKNOWN]
+      - name: region_name
+        description: Display name.
+        tests: [not_null]
+
+  - name: fct_merch_sales_daily
+    description: >-
+      Mapped sales at the grain of title, partner, region, and day. All figures are synthetic.
+      Unmapped SKUs are excluded and reported in mart_data_health.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [title_id, partner_id, region, sale_date]
+    columns:
+      - name: title_id
+        description: Foreign key to dim_titles.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_titles')
+                field: title_id
+      - name: partner_id
+        description: Foreign key to dim_partners.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_partners')
+                field: partner_id
+      - name: region
+        description: Foreign key to dim_regions.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_regions')
+                field: region
+      - name: sale_date
+        description: Sale date. For Vault, this is the UTC date of the order.
+        tests: [not_null]
+      - name: units
+        description: Units sold.
+        tests: [not_null]
+      - name: revenue_usd
+        description: Revenue converted to USD at the sale date's rate.
+        tests: [not_null]
+
+  - name: fct_title_buzz_daily
+    description: Real daily pageviews at the grain of title and day, for every day in the window.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [title_id, view_date]
+    columns:
+      - name: title_id
+        description: Foreign key to dim_titles.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_titles')
+                field: title_id
+      - name: view_date
+        description: Calendar day.
+        tests: [not_null]
+      - name: pageviews
+        description: Daily pageviews. Null means Wikipedia has no data for that day.
+
+  - name: mart_title_launch_performance
+    description: Buzz and sales aligned to days since launch, from −30 to +90, for each launch.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [launch_id, days_since_launch]
+    columns:
+      - name: launch_id
+        description: Foreign key to dim_title_launches.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_title_launches')
+                field: launch_id
+      - name: title_id
+        description: Foreign key to dim_titles.
+      - name: launch_name
+        description: Title and season label.
+      - name: launch_date
+        description: First release date of the launch.
+      - name: days_since_launch
+        description: Calendar days from the launch date. Negative values are before launch.
+        tests: [not_null]
+      - name: calendar_date
+        description: The actual date of this row.
+        tests: [not_null]
+      - name: pageviews
+        description: That day's pageviews for the title.
+      - name: units
+        description: Units sold across all partners and regions. Zero when nothing sold.
+        tests: [not_null]
+      - name: revenue_usd
+        description: Revenue across all partners and regions. Zero when nothing sold.
+        tests: [not_null]
+
+  - name: mart_partner_conversion
+    description: >-
+      Sales per 1,000 pageviews by partner, region, and title. Pageviews are global English
+      Wikipedia views, so every region shares the same denominator. Treat this as a relative
+      index, and compare partners only within a region on titles they both sell. To roll up,
+      divide total sales by total pageviews, and never average the ratios. Excludes UNKNOWN regions.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [partner_id, region, title_id]
+    columns:
+      - name: partner_id
+        description: Foreign key to dim_partners.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_partners')
+                field: partner_id
+      - name: region
+        description: Foreign key to dim_regions.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_regions')
+                field: region
+      - name: title_id
+        description: Foreign key to dim_titles.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_titles')
+                field: title_id
+      - name: fan_segment
+        description: The title's fan segment.
+      - name: units
+        description: Units sold.
+      - name: revenue_usd
+        description: Revenue in USD.
+      - name: pageviews
+        description: The title's pageviews from its first sale date through the window end.
+        tests: [not_null]
+      - name: revenue_per_1k_pageviews
+        description: USD revenue per 1,000 pageviews.
+        tests: [not_null]
+      - name: units_per_1k_pageviews
+        description: Units per 1,000 pageviews.
+
+  - name: mart_buzz_sales_lag
+    description: >-
+      Correlation between daily units and pageviews at each lag from 0 to 21 days, by title
+      and partner. Answers whether buzz leads sales and by how long. Sales are generated from
+      pageviews, so this shows the pipeline recovering a planted effect, not real behavior.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [title_id, partner_id, lag_days]
+    columns:
+      - name: title_id
+        description: Foreign key to dim_titles.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_titles')
+                field: title_id
+      - name: partner_id
+        description: Foreign key to dim_partners.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_partners')
+                field: partner_id
+      - name: lag_days
+        description: Days between the pageviews and the sales they are compared with.
+        tests: [not_null]
+      - name: correlation
+        description: Pearson correlation between daily units and lagged pageviews.
+        tests: [not_null]
+      - name: days_compared
+        description: Number of days in the correlation.
+      - name: is_best_lag
+        description: True for the lag with the highest correlation for that title and partner.
+        tests: [not_null]
+
+  - name: mart_data_health
+    description: >-
+      One row per data quality issue, by check, partner, and subject. check_name says which
+      kind of issue it is, and each kind fills only the columns that apply to it.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [check_name, partner_id, subject]
+    columns:
+      - name: check_name
+        description: unmapped_sku, unknown_region, restatement, late_file, or duplicate_lines.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [unmapped_sku, unknown_region, restatement, late_file, duplicate_lines]
+      - name: partner_id
+        description: Foreign key to dim_partners.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_partners')
+                field: partner_id
+      - name: subject
+        description: The SKU, month, or file the row is about, or a label for a partner-wide count.
+        tests: [not_null]
+      - name: row_count
+        description: Sales rows affected. For duplicate_lines, the lines removed.
+      - name: amount_usd
+        description: >-
+          Revenue affected. For restatement, the restated revenue. For duplicate_lines, the
+          revenue that would have been double counted.
+      - name: original_amount_usd
+        description: For restatement, the revenue in the first version.
+      - name: delta_usd
+        description: For restatement, restated revenue minus original revenue.
+      - name: days_late
+        description: For late_file, the days it arrived after the next period's file.

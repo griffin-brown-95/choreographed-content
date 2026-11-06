@@ -190,6 +190,7 @@ The generator must be **deterministic** (fixed random seed) and must **read the 
 - `stg_wikipedia__pageviews`
 - `stg_frankfurter__fx_rates`
 - `stg_partner_feeds__delivery_manifest`
+- `base_vault__order_lines` (every Vault line before dedupe, so `stg_vault__order_lines` and `mart_data_health` share one JSON parser)
 
 All staging models output a common shape where applicable: `partner_id, sale_date, partner_sku, country_code, units, gross_amount, currency_code`.
 
@@ -208,7 +209,9 @@ In staging, `country_code` is the code the partner reported, with blanks set to 
 - `mart_title_launch_performance` — buzz and sales indexed to days-since-launch (−30 to +90), per `launch_id`.
 - `mart_partner_conversion` — sales per 1,000 pageviews by partner × region × title. Pageviews are global English Wikipedia views, so every region shares the same denominator. Treat this as a relative index, not true regional conversion. Compare partners only within a region, on titles they both sell. Rollups must use total sales ÷ total pageviews, never an average of ratios.
 - `mart_buzz_sales_lag` — correlation between daily pageviews and daily sales at each lag, by title × partner. This answers the headline question and uses SQL only.
-- `mart_data_health` — unmapped SKU counts and revenue, `UNKNOWN` region rows, late files (from the delivery manifest), restatement deltas, duplicate counts removed.
+- `mart_data_health` — unmapped SKU counts and revenue, `UNKNOWN` region rows, late files (from the delivery manifest), restatement deltas, duplicate counts removed. One row per check, partner, and subject, with `check_name` saying which kind of issue it is. A file is late when it arrives after the next period's file.
+
+`mart_partner_conversion` counts pageviews from each title's `first_sale_date`, because earlier views couldn't produce sales. It excludes `UNKNOWN` region rows, so Toyworks' North America conversion reads about 1% low.
 
 ### 6.5 Tests
 - Generic: `unique`, `not_null` on all keys; `relationships` from facts to dims; `accepted_values` for `currency_code` and `region` (including `UNKNOWN`).
